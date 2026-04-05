@@ -7,6 +7,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const app = express();
+const doctorRoutes = require("./routes/doctorRoutes");
 
 // Middleware
 app.use(cors());
@@ -23,6 +24,11 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("User connected:", socket.id);
 
+  socket.on("joinRoom", (queueId) => {
+    socket.join(queueId);
+    console.log(`Joined room: ${queueId}`);
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected");
   });
@@ -35,36 +41,55 @@ app.get("/", (req, res) => {
 
 const QueueEntry = require("./models/QueueEntry");
 const Completed = require("./models/Completed");
+const Doctor = require("./models/Doctor");
+
+app.use("/doctor", doctorRoutes);
 
 app.post("/join-queue", async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, queueId } = req.body;
 
-    if (!name) {
-      return res.status(400).json({ message: "Name is required" });
+    if (!name || !queueId) {
+      return res.status(400).json({ message: "Name and queueId required" });
     }
+
+    // Count only this doctor's queue
+    const count = await QueueEntry.countDocuments({ queueId });
+
+    const doctor = await Doctor.findOne({ queueId });
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    const token = `${doctor.prefix}${count + 1}`;
 
     const newUser = new QueueEntry({
       name,
+      queueId,
+      token,
     });
 
     const savedUser = await newUser.save();
-    io.emit("queueUpdated");
 
-    const count = await QueueEntry.countDocuments();
+    io.to(queueId).emit("queueUpdated", { queueId });
 
     res.status(201).json({
       user: savedUser,
-      position: count,
+      position: count + 1,
+      token,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-app.get("/queue", async (req, res) => {
+app.get("/queue/:queueId", async (req, res) => {
   try {
-    const users = await QueueEntry.find().sort({ joinedAt: 1 });
+    const users = await QueueEntry.find({ queueId: req.params.queueId }).sort({
+      joinedAt: 1,
+    });
+
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -73,7 +98,9 @@ app.get("/queue", async (req, res) => {
 
 app.post("/next", async (req, res) => {
   try {
-    const user = await QueueEntry.findOne().sort({ joinedAt: 1 });
+    const { queueId } = req.body;
+
+    const user = await QueueEntry.findOne({ queueId }).sort({ joinedAt: 1 });
 
     if (!user) {
       return res.status(404).json({ message: "Queue is empty" });
@@ -97,8 +124,11 @@ app.post("/next", async (req, res) => {
     // Remove from active queue
     await QueueEntry.findByIdAndDelete(user._id);
 
-    io.emit("queueUpdated");
-    io.emit("nowServing", completedUser);
+    io.to(queueId).emit("queueUpdated", { queueId });
+    io.to(queueId).emit("nowServing", {
+      ...completedUser.toObject(),
+      queueId: queueId,
+    });
 
     res.json({
       message: "Next user called",
@@ -106,6 +136,27 @@ app.post("/next", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/analytics/:queueId", async (req, res) => {
+  try {
+    const data = await Completed.aggregate([
+      {
+        $match: { queueId: req.params.queueId },
+      },
+      {
+        $group: {
+          _id: "$queueId",
+          totalPatients: { $sum: 1 },
+          avgWaitTime: { $avg: "$waitTime" },
+        },
+      },
+    ]);
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

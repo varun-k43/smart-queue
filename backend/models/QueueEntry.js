@@ -5,9 +5,12 @@ const queueSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  token: {
+    type: String,
+  },
   queueId: {
     type: String,
-    default: "defaultQueue",
+    required: true,
   },
   joinedAt: {
     type: Date,
