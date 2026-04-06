@@ -8,6 +8,7 @@ const { Server } = require("socket.io");
 
 const app = express();
 const doctorRoutes = require("./routes/doctorRoutes");
+const assistantRoutes = require("./routes/assistantRoutes");
 
 // Middleware
 app.use(cors());
@@ -44,6 +45,7 @@ const Completed = require("./models/Completed");
 const Doctor = require("./models/Doctor");
 
 app.use("/doctor", doctorRoutes);
+app.use("/assistant", assistantRoutes);
 
 app.post("/join-queue", async (req, res) => {
   try {

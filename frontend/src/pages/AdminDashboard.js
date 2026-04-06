@@ -7,13 +7,22 @@ const API_BASE_URL = "http://localhost:5000";
 
 function AdminDashboard() {
   const [doctors, setDoctors] = useState([]);
+  const [assistants, setAssistants] = useState([]);
   const [queue, setQueue] = useState([]);
   const [current, setCurrent] = useState(null);
   const [selectedDoctor, setSelectedDoctor] = useState("");
   const [analytics, setAnalytics] = useState([]);
   const [doctorForm, setDoctorForm] = useState({ name: "" });
+  const [assistantForm, setAssistantForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
+  const [assistantAssignments, setAssistantAssignments] = useState({});
   const [doctorMessage, setDoctorMessage] = useState("");
   const [doctorError, setDoctorError] = useState("");
+  const [assistantMessage, setAssistantMessage] = useState("");
+  const [assistantError, setAssistantError] = useState("");
   const [socket] = useState(() => io(API_BASE_URL));
   const navigate = useNavigate();
 
@@ -55,6 +64,25 @@ function AdminDashboard() {
     });
   };
 
+  const fetchAssistants = async () => {
+    const res = await axios.get(`${API_BASE_URL}/assistant`);
+    const assistantList = res.data;
+
+    setAssistants(assistantList);
+    setAssistantAssignments((currentAssignments) => {
+      const nextAssignments = { ...currentAssignments };
+
+      assistantList.forEach((assistant) => {
+        nextAssignments[assistant._id] =
+          currentAssignments[assistant._id] ||
+          assistant.assignedDoctorId?._id ||
+          "";
+      });
+
+      return nextAssignments;
+    });
+  };
+
   const callNext = async () => {
     if (!selectedDoctor || queue.length === 0) return;
 
@@ -70,6 +98,15 @@ function AdminDashboard() {
     const { name, value } = event.target;
 
     setDoctorForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleAssistantInputChange = (event) => {
+    const { name, value } = event.target;
+
+    setAssistantForm((prev) => ({
       ...prev,
       [name]: value,
     }));
@@ -108,6 +145,61 @@ function AdminDashboard() {
     }
   };
 
+  const handleAddAssistant = async (event) => {
+    event.preventDefault();
+    setAssistantMessage("");
+    setAssistantError("");
+
+    try {
+      await axios.post(`${API_BASE_URL}/assistant`, {
+        name: assistantForm.name.trim(),
+        email: assistantForm.email.trim(),
+        password: assistantForm.password,
+      });
+
+      setAssistantForm({ name: "", email: "", password: "" });
+      setAssistantMessage("Assistant added successfully.");
+      await fetchAssistants();
+    } catch (error) {
+      setAssistantError(
+        error.response?.data?.message || "Failed to add assistant.",
+      );
+    }
+  };
+
+  const handleAssistantDoctorChange = (assistantId, doctorId) => {
+    setAssistantAssignments((prev) => ({
+      ...prev,
+      [assistantId]: doctorId,
+    }));
+  };
+
+  const handleAssignDoctor = async (assistantId) => {
+    const doctorId = assistantAssignments[assistantId];
+
+    if (!doctorId) {
+      setAssistantError("Please select a doctor before assigning.");
+      setAssistantMessage("");
+      return;
+    }
+
+    setAssistantMessage("");
+    setAssistantError("");
+
+    try {
+      await axios.put(`${API_BASE_URL}/assistant/${assistantId}/assign`, {
+        doctorId,
+      });
+
+      setAssistantMessage("Doctor assigned successfully.");
+      await fetchAssistants();
+    } catch (error) {
+      setAssistantError(
+        error.response?.data?.message || "Failed to assign doctor.",
+      );
+    }
+  };
+
   useEffect(() => {
     const isAdmin = localStorage.getItem("isAdmin");
 
@@ -117,6 +209,7 @@ function AdminDashboard() {
     }
 
     fetchDoctors();
+    fetchAssistants();
   }, [navigate]);
 
   useEffect(() => {
@@ -258,6 +351,92 @@ function AdminDashboard() {
             boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
           }}
         >
+          <h2>Manage Assistants</h2>
+
+          <form onSubmit={handleAddAssistant}>
+            <input
+              name="name"
+              value={assistantForm.name}
+              onChange={handleAssistantInputChange}
+              placeholder="Assistant name"
+              style={{
+                width: "100%",
+                padding: "10px",
+                marginBottom: "10px",
+                borderRadius: "5px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <input
+              name="email"
+              type="email"
+              value={assistantForm.email}
+              onChange={handleAssistantInputChange}
+              placeholder="Assistant email"
+              style={{
+                width: "100%",
+                padding: "10px",
+                marginBottom: "10px",
+                borderRadius: "5px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <input
+              name="password"
+              type="password"
+              value={assistantForm.password}
+              onChange={handleAssistantInputChange}
+              placeholder="Assistant password"
+              style={{
+                width: "100%",
+                padding: "10px",
+                marginBottom: "10px",
+                borderRadius: "5px",
+                border: "1px solid #ccc",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <button
+              type="submit"
+              style={{
+                padding: "10px 20px",
+                backgroundColor: "#3498db",
+                color: "white",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+              }}
+            >
+              Add Assistant
+            </button>
+          </form>
+
+          {assistantMessage && (
+            <p style={{ color: "#27ae60", marginTop: "12px" }}>
+              {assistantMessage}
+            </p>
+          )}
+
+          {assistantError && (
+            <p style={{ color: "#e74c3c", marginTop: "12px" }}>
+              {assistantError}
+            </p>
+          )}
+        </div>
+
+        <div
+          style={{
+            backgroundColor: "#fff",
+            padding: "20px",
+            borderRadius: "10px",
+            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+          }}
+        >
           <h2>Doctor List</h2>
 
           {doctors.length === 0 ? (
@@ -295,6 +474,89 @@ function AdminDashboard() {
                   >
                     Delete
                   </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div
+          style={{
+            backgroundColor: "#fff",
+            padding: "20px",
+            borderRadius: "10px",
+            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+          }}
+        >
+          <h2>Assistant List</h2>
+
+          {assistants.length === 0 ? (
+            <p>No assistants added yet.</p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {assistants.map((assistant) => (
+                <li
+                  key={assistant._id}
+                  style={{
+                    padding: "10px 0",
+                    borderBottom: "1px solid #ecf0f1",
+                  }}
+                >
+                  <div style={{ marginBottom: "10px" }}>
+                    <strong>{assistant.name}</strong>
+                    <p style={{ margin: "5px 0", color: "#555" }}>
+                      {assistant.email}
+                    </p>
+                    <p style={{ margin: 0, color: "#555" }}>
+                      Assigned Doctor:{" "}
+                      {assistant.assignedDoctorId?.name || "Not assigned"}
+                    </p>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <select
+                      value={assistantAssignments[assistant._id] || ""}
+                      onChange={(event) =>
+                        handleAssistantDoctorChange(
+                          assistant._id,
+                          event.target.value,
+                        )
+                      }
+                      style={{
+                        padding: "10px",
+                        borderRadius: "5px",
+                        minWidth: "180px",
+                      }}
+                    >
+                      <option value="">Select doctor</option>
+                      {doctors.map((doctor) => (
+                        <option key={doctor._id} value={doctor._id}>
+                          {doctor.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      onClick={() => handleAssignDoctor(assistant._id)}
+                      style={{
+                        padding: "8px 12px",
+                        backgroundColor: "#2ecc71",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "5px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Assign Doctor
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
