@@ -99,8 +99,12 @@ app.get("/queue/:queueId", async (req, res) => {
 });
 
 app.post("/next", async (req, res) => {
+  const { queueId } = req.body;
+
   try {
-    const { queueId } = req.body;
+    if (!queueId) {
+      return res.status(400).json({ message: "queueId is required" });
+    }
 
     const user = await QueueEntry.findOne({ queueId }).sort({ joinedAt: 1 });
 

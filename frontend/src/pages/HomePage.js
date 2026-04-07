@@ -45,6 +45,10 @@ function HomePage() {
         >
           Admin Login
         </button>
+
+        <button onClick={() => navigate("/assistant-login")}>
+          Assistant Login
+        </button>
       </div>
     </div>
   );

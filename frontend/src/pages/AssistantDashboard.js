@@ -1,25 +1,33 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
+import { useNavigate } from "react-router-dom";
 
 const API_BASE_URL = "http://localhost:5000";
-const ASSISTANT_ID = "69d3f7875328b65bef7e1604";
 
 function AssistantDashboard() {
   const [assistant, setAssistant] = useState(null);
   const [queue, setQueue] = useState([]);
   const [current, setCurrent] = useState(null);
   const [error, setError] = useState("");
-  const [socket] = useState(() => io(API_BASE_URL));
+  const [socket, setSocket] = useState(null);
+  const navigate = useNavigate();
+  const ASSISTANT_ID = localStorage.getItem("assistantId");
+
+  useEffect(() => {
+    const newSocket = io(API_BASE_URL);
+    setSocket(newSocket);
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
 
   const assignedDoctor = assistant?.assignedDoctorId || null;
   const assignedQueueId = assignedDoctor?.queueId || "";
 
-  const fetchAssistant = async () => {
-    if (!ASSISTANT_ID || ASSISTANT_ID === "PUT_ASSISTANT_ID_HERE") {
-      setError(
-        "Set ASSISTANT_ID in AssistantDashboard.js to load assistant data.",
-      );
+  const fetchAssistant = useCallback(async () => {
+    if (!ASSISTANT_ID) {
+      navigate("/assistant-login");
       setAssistant(null);
       return;
     }
@@ -35,6 +43,11 @@ function AssistantDashboard() {
           "Failed to load assistant details.",
       );
     }
+  }, [ASSISTANT_ID, navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("assistantId");
+    navigate("/");
   };
 
   const fetchQueue = async (queueId) => {
@@ -43,21 +56,31 @@ function AssistantDashboard() {
       return;
     }
 
-    const res = await axios.get(`${API_BASE_URL}/queue/${queueId}`);
-    setQueue(res.data);
+    try {
+      const res = await axios.get(`${API_BASE_URL}/queue/${queueId}`);
+      setQueue(res.data);
+    } catch (err) {
+      console.error("Queue fetch failed");
+    }
   };
 
   const callNext = async () => {
     if (!assignedQueueId || queue.length === 0) return;
 
-    await axios.post(`${API_BASE_URL}/next`, { queueId: assignedQueueId });
+    try {
+      await axios.post(`${API_BASE_URL}/next`, { queueId: assignedQueueId });
+    } catch (err) {
+      console.error("Failed to call next");
+    }
   };
 
   useEffect(() => {
     fetchAssistant();
-  }, []);
+  }, [fetchAssistant]);
 
   useEffect(() => {
+    if (!socket) return;
+
     if (!assignedQueueId) {
       setQueue([]);
       setCurrent(null);
@@ -87,7 +110,7 @@ function AssistantDashboard() {
       socket.off("queueUpdated", handleQueueUpdated);
       socket.off("nowServing", handleNowServing);
     };
-  }, [assignedQueueId]);
+  }, [assignedQueueId, socket]);
 
   return (
     <div
@@ -101,6 +124,22 @@ function AssistantDashboard() {
       <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
         Assistant Dashboard
       </h2>
+
+      <div style={{ textAlign: "center", marginBottom: "20px" }}>
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: "8px 16px",
+            backgroundColor: "#2c3e50",
+            color: "white",
+            border: "none",
+            borderRadius: "5px",
+            cursor: "pointer",
+          }}
+        >
+          Logout
+        </button>
+      </div>
 
       {error && (
         <div

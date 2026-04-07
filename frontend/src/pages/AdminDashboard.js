@@ -23,7 +23,7 @@ function AdminDashboard() {
   const [doctorError, setDoctorError] = useState("");
   const [assistantMessage, setAssistantMessage] = useState("");
   const [assistantError, setAssistantError] = useState("");
-  const [socket] = useState(() => io(API_BASE_URL));
+  const [socket, setSocket] = useState(null);
   const navigate = useNavigate();
 
   const fetchQueue = async (queueId) => {
@@ -138,6 +138,7 @@ function AdminDashboard() {
       await axios.delete(`${API_BASE_URL}/doctor/${doctorId}`);
       setDoctorMessage("Doctor deleted successfully.");
       await fetchDoctors();
+      setSelectedDoctor("");
     } catch (error) {
       setDoctorError(
         error.response?.data?.message || "Failed to delete doctor.",
@@ -213,6 +214,15 @@ function AdminDashboard() {
   }, [navigate]);
 
   useEffect(() => {
+    const newSocket = io(API_BASE_URL);
+    setSocket(newSocket);
+    return () => {
+      newSocket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
     if (!selectedDoctor) {
       setCurrent(null);
       setQueue([]);
@@ -565,28 +575,26 @@ function AdminDashboard() {
       </div>
 
       <div style={{ textAlign: "center", marginBottom: "20px" }}>
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <select
-            value={selectedDoctor}
-            onChange={(e) => setSelectedDoctor(e.target.value)}
-            disabled={doctors.length === 0}
-            style={{
-              padding: "10px",
-              borderRadius: "5px",
-              minWidth: "220px",
-            }}
-          >
-            {doctors.length === 0 ? (
-              <option value="">No doctors available</option>
-            ) : (
-              doctors.map((doctor) => (
-                <option key={doctor._id} value={doctor.queueId}>
-                  {doctor.name} ({doctor.queueId})
-                </option>
-              ))
-            )}
-          </select>
-        </div>
+        <select
+          value={selectedDoctor}
+          onChange={(e) => setSelectedDoctor(e.target.value)}
+          disabled={doctors.length === 0}
+          style={{
+            padding: "10px",
+            borderRadius: "5px",
+            minWidth: "220px",
+          }}
+        >
+          {doctors.length === 0 ? (
+            <option value="">No doctors available</option>
+          ) : (
+            doctors.map((doctor) => (
+              <option key={doctor._id} value={doctor.queueId}>
+                {doctor.name} ({doctor.queueId})
+              </option>
+            ))
+          )}
+        </select>
 
         <button
           onClick={callNext}

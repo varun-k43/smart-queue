@@ -20,7 +20,9 @@ router.post("/", async (req, res) => {
     const existingAssistant = await Assistant.findOne({ email });
 
     if (existingAssistant) {
-      return res.status(400).json({ message: "Assistant email already exists" });
+      return res
+        .status(400)
+        .json({ message: "Assistant email already exists" });
     }
 
     if (assignedDoctorId) {
@@ -55,6 +57,36 @@ router.get("/", async (req, res) => {
       .sort({ createdAt: -1 });
 
     return res.json(assistants);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
+router.post("/login", async (req, res) => {
+  try {
+    const email = req.body.email?.trim().toLowerCase();
+    const password = req.body.password;
+
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email and password are required" });
+    }
+
+    const assistant = await Assistant.findOne({ email }).populate(
+      "assignedDoctorId",
+    );
+
+    if (!assistant || assistant.password !== password) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    return res.json({
+      _id: assistant._id,
+      name: assistant.name,
+      email: assistant.email,
+      assignedDoctorId: assistant.assignedDoctorId,
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
