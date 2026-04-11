@@ -12,7 +12,7 @@ function AssistantDashboard() {
   const [error, setError] = useState("");
   const [socket, setSocket] = useState(null);
   const navigate = useNavigate();
-  const ASSISTANT_ID = localStorage.getItem("assistantId");
+  const ASSISTANT_ID = sessionStorage.getItem("assistantId");
 
   useEffect(() => {
     const newSocket = io(API_BASE_URL);
@@ -46,7 +46,7 @@ function AssistantDashboard() {
   }, [ASSISTANT_ID, navigate]);
 
   const handleLogout = () => {
-    localStorage.removeItem("assistantId");
+    sessionStorage.removeItem("assistantId");
     navigate("/");
   };
 

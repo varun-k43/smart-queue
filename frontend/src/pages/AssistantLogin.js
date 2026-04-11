@@ -13,7 +13,7 @@ function AssistantLogin() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const assistantId = localStorage.getItem("assistantId");
+    const assistantId = sessionStorage.getItem("assistantId");
     if (assistantId) {
       navigate("/assistant");
     }
@@ -30,7 +30,7 @@ function AssistantLogin() {
         password: password.trim(),
       });
 
-      localStorage.setItem("assistantId", res.data._id);
+      sessionStorage.setItem("assistantId", res.data._id);
       navigate("/assistant");
     } catch (loginError) {
       setError(
