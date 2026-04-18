@@ -27,9 +27,13 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ message: "Name is required" });
     }
 
-    const doctorCount = await Doctor.countDocuments();
-    const prefix = getExcelColumnName(doctorCount);
-    const queueId = `doctor${doctorCount + 1}`;
+    const lastDoctor = await Doctor.findOne().sort({ createdAt: -1 });
+    const lastNumber = lastDoctor
+      ? parseInt(lastDoctor.queueId?.replace("doctor", "")) || 0
+      : 0;
+    const nextNumber = lastNumber + 1;
+    const prefix = getExcelColumnName(nextNumber - 1);
+    const queueId = `doctor${nextNumber}`;
 
     const doctor = await Doctor.create({
       name,

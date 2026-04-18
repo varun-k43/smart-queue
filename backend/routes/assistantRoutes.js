@@ -122,6 +122,20 @@ router.put("/:id/assign", async (req, res) => {
   }
 });
 
+router.delete("/:id", async (req, res) => {
+  try {
+    const assistant = await Assistant.findByIdAndDelete(req.params.id);
+
+    if (!assistant) {
+      return res.status(404).json({ message: "Assistant not found" });
+    }
+
+    return res.json({ message: "Assistant deleted successfully" });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   try {
     const assistant = await Assistant.findById(req.params.id).populate(
