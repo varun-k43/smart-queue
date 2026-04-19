@@ -106,34 +106,45 @@ app.post("/next", async (req, res) => {
       return res.status(400).json({ message: "queueId is required" });
     }
 
-    const user = await QueueEntry.findOne({ queueId }).sort({ joinedAt: 1 });
+    const user = await QueueEntry.findOneAndDelete(
+      { queueId },
+      { sort: { joinedAt: 1 } },
+    );
 
     if (!user) {
       return res.status(404).json({ message: "Queue is empty" });
+    }
+
+    const doctor = await Doctor.findOne({ queueId });
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
     }
 
     // Calculate wait time (in minutes)
     const waitTime = Math.floor((Date.now() - new Date(user.joinedAt)) / 60000);
 
     // Save to Completed collection
-    const completedUser = new Completed({
+    const completedUser = await Completed.create({
       name: user.name,
       queueId: user.queueId,
       joinedAt: user.joinedAt,
       servedAt: new Date(),
       waitTime,
       status: "completed",
+      token: user.token,
     });
 
-    await completedUser.save();
-
-    // Remove from active queue
-    await QueueEntry.findByIdAndDelete(user._id);
+    doctor.currentPatient = {
+      token: user.token,
+      name: user.name,
+    };
+    await doctor.save();
 
     io.to(queueId).emit("queueUpdated", { queueId });
     io.to(queueId).emit("nowServing", {
-      ...completedUser.toObject(),
-      queueId: queueId,
+      queueId,
+      token: user.token,
+      name: user.name,
     });
 
     res.json({
@@ -163,6 +174,18 @@ app.get("/analytics/:queueId", async (req, res) => {
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/current/:queueId", async (req, res) => {
+  try {
+    const doctor = await Doctor.findOne({ queueId: req.params.queueId });
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+    return res.json(doctor.currentPatient || null);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 });
 

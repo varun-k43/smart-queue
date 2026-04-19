@@ -18,6 +18,10 @@ const doctorSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    currentPatient: {
+      token: String,
+      name: String,
+    },
   },
   {
     timestamps: true,

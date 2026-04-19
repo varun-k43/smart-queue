@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { io } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +11,8 @@ function AssistantDashboard() {
   const [current, setCurrent] = useState(null);
   const [error, setError] = useState("");
   const [socket, setSocket] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const queueRef = useRef([]);
   const navigate = useNavigate();
   const ASSISTANT_ID = sessionStorage.getItem("assistantId");
 
@@ -66,17 +68,35 @@ function AssistantDashboard() {
 
   const callNext = async () => {
     if (!assignedQueueId || queue.length === 0) return;
-
+    setLoading(true);
     try {
-      await axios.post(`${API_BASE_URL}/next`, { queueId: assignedQueueId });
+      await axios.post(`${API_BASE_URL}/next`, {
+        queueId: assignedQueueId,
+      });
     } catch (err) {
       console.error("Failed to call next");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCurrentPatient = async (queueId) => {
+    try {
+      if (!queueId) return;
+      const res = await axios.get(`${API_BASE_URL}/current/${queueId}`);
+      setCurrent(res.data || null);
+    } catch (err) {
+      console.error("Failed to fetch current patient");
     }
   };
 
   useEffect(() => {
     fetchAssistant();
   }, [fetchAssistant]);
+
+  useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
 
   useEffect(() => {
     if (!socket) return;
@@ -87,8 +107,10 @@ function AssistantDashboard() {
       return;
     }
 
-    setCurrent(null);
-    fetchQueue(assignedQueueId);
+    (async () => {
+      await fetchQueue(assignedQueueId);
+      await fetchCurrentPatient(assignedQueueId);
+    })();
     socket.emit("joinRoom", assignedQueueId);
 
     const handleQueueUpdated = async (data) => {
@@ -99,7 +121,10 @@ function AssistantDashboard() {
 
     const handleNowServing = (data) => {
       if (data.queueId === assignedQueueId) {
-        setCurrent(data);
+        setCurrent({
+          token: data.token,
+          name: data.name,
+        });
       }
     };
 
@@ -112,136 +137,185 @@ function AssistantDashboard() {
     };
   }, [assignedQueueId, socket]);
 
+  const nextPatient = queue[0] || null;
+  const currentToken = current?.token || "--";
+
   return (
-    <div
-      style={{
-        padding: "30px",
-        fontFamily: "Arial",
-        backgroundColor: "#f5f6fa",
-        minHeight: "100vh",
-      }}
-    >
-      <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
-        Assistant Dashboard
-      </h2>
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="flex min-h-screen">
+        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-5 py-6 shadow-sm md:flex md:flex-col">
+          <div className="mb-10">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+              Smart Queue
+            </p>
+            <h1 className="mt-2 text-xl font-bold">Assistant</h1>
+          </div>
 
-      <div style={{ textAlign: "center", marginBottom: "20px" }}>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: "8px 16px",
-            backgroundColor: "#2c3e50",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          Logout
-        </button>
-      </div>
+          <nav className="space-y-2">
+            <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700">
+              Dashboard
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full rounded-lg px-4 py-3 text-left text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+            >
+              Logout
+            </button>
+          </nav>
+        </aside>
 
-      {error && (
-        <div
-          style={{
-            maxWidth: "500px",
-            margin: "0 auto 20px",
-            padding: "15px",
-            backgroundColor: "#fff",
-            borderRadius: "10px",
-            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-            color: "#e74c3c",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {assistant && (
-        <div
-          style={{
-            maxWidth: "500px",
-            margin: "0 auto 20px",
-            padding: "20px",
-            backgroundColor: "#fff",
-            borderRadius: "10px",
-            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-          }}
-        >
-          <h3>{assistant.name}</h3>
-          <p>Email: {assistant.email}</p>
-          <p>Assigned Doctor: {assignedDoctor?.name || "Not assigned"}</p>
-          <p>Queue ID: {assignedQueueId || "Not available"}</p>
-        </div>
-      )}
-
-      <div style={{ textAlign: "center", marginBottom: "20px" }}>
-        <button
-          onClick={callNext}
-          disabled={!assignedQueueId || queue.length === 0}
-          style={{
-            padding: "10px 20px",
-            backgroundColor:
-              !assignedQueueId || queue.length === 0 ? "#ccc" : "#e74c3c",
-            color: "white",
-            border: "none",
-            borderRadius: "5px",
-            cursor:
-              !assignedQueueId || queue.length === 0
-                ? "not-allowed"
-                : "pointer",
-          }}
-        >
-          Call Next
-        </button>
-      </div>
-
-      <div
-        style={{
-          textAlign: "center",
-          padding: "15px",
-          backgroundColor: "#fff",
-          borderRadius: "10px",
-          boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-          maxWidth: "500px",
-          margin: "0 auto 20px",
-        }}
-      >
-        <h2>Now Serving: {current ? current.name : "None"}</h2>
-        {current && <p>Wait Time: {current.waitTime} mins</p>}
-      </div>
-
-      <div
-        style={{
-          maxWidth: "500px",
-          margin: "0 auto",
-          backgroundColor: "#fff",
-          padding: "20px",
-          borderRadius: "10px",
-          boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-        }}
-      >
-        <h2>Queue</h2>
-
-        {!assignedQueueId ? (
-          <p>No doctor assigned to this assistant.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {queue.map((user, index) => (
-              <li
-                key={user._id}
-                style={{
-                  padding: "10px",
-                  marginBottom: "8px",
-                  backgroundColor: index === 0 ? "#f8d7da" : "#ecf0f1",
-                  borderRadius: "5px",
-                }}
+        <main className="flex-1 px-4 py-5 sm:px-6 lg:px-10">
+          <div className="mx-auto flex max-w-6xl flex-col gap-5">
+            <div className="flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-sm md:hidden">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  Smart Queue
+                </p>
+                <h1 className="text-lg font-bold">Assistant</h1>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
               >
-                {index + 1}. {user.name}
-              </li>
-            ))}
-          </ul>
-        )}
+                Logout
+              </button>
+            </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-100 bg-white px-5 py-4 text-sm font-medium text-red-600 shadow-sm">
+                {error}
+              </div>
+            )}
+
+            <section className="rounded-lg bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                Doctor Info
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-sm text-slate-500">Doctor</p>
+                  <p className="mt-1 text-lg font-bold">
+                    {assignedDoctor?.name || "Not assigned"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Assistant</p>
+                  <p className="mt-1 text-lg font-bold">
+                    {assistant?.name || "Loading"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Queue</p>
+                  <p className="mt-1 text-lg font-bold">
+                    {assignedQueueId || "Not available"}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-lg bg-white p-6 text-center shadow-lg sm:p-10">
+              <p className="text-sm font-bold uppercase tracking-[0.25em] text-blue-600">
+                Now Serving
+              </p>
+              <div className="mt-5 flex min-h-52 flex-col items-center justify-center rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-8">
+                {current ? (
+                  <>
+                    <p className="text-6xl font-black leading-none text-blue-700 sm:text-8xl">
+                      {currentToken}
+                    </p>
+                    <p className="mt-5 text-xl font-semibold text-slate-600 sm:text-2xl">
+                      {current.name}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-6xl font-black leading-none text-slate-300 sm:text-8xl">
+                      --
+                    </p>
+                    <p className="mt-5 text-xl font-semibold text-slate-500">
+                      No patient called
+                    </p>
+                  </>
+                )}
+              </div>
+            </section>
+
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+              <section className="rounded-lg bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  Up Next
+                </p>
+
+                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-5">
+                  {nextPatient ? (
+                    <>
+                      <p className="text-4xl font-black text-slate-950">
+                        {nextPatient.token}
+                      </p>
+                      <p className="mt-2 text-base font-medium text-slate-500">
+                        {nextPatient.name}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-4xl font-black text-slate-300">--</p>
+                      <p className="mt-2 text-base font-medium text-slate-500">
+                        No patient waiting
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={callNext}
+                  disabled={loading || !assignedQueueId || queue.length === 0}
+                  className="mt-5 w-full rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  {loading ? "Calling..." : "Call Next Patient"}
+                </button>
+              </section>
+
+              <section className="rounded-lg bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                    Queue List
+                  </p>
+                  <p className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600">
+                    {queue.length}
+                  </p>
+                </div>
+
+                <div className="mt-5 max-h-80 overflow-y-auto pr-1">
+                  {!assignedQueueId ? (
+                    <p className="rounded-lg bg-slate-50 px-4 py-6 text-center text-sm font-medium text-slate-500">
+                      No doctor assigned to this assistant.
+                    </p>
+                  ) : queue.length === 0 ? (
+                    <p className="rounded-lg bg-slate-50 px-4 py-6 text-center text-sm font-medium text-slate-500">
+                      Queue is empty.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {queue.map((user) => (
+                        <li
+                          key={user._id}
+                          className="rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm"
+                        >
+                          <p className="text-lg font-black text-slate-950">
+                            {user.token}
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-slate-500">
+                            {user.name}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
